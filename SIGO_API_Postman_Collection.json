@@ -1,0 +1,433 @@
+{
+	"info": {
+		"_postman_id": "12345678-1234-1234-1234-123456789abc",
+		"name": "SIGO API - Facturación Electrónica",
+		"description": "Colección completa para la API SIGO de integración con facturación electrónica para Colombia",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "🏥 Health & Info",
+			"item": [
+				{
+					"name": "API Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api"
+							]
+						},
+						"description": "Obtiene información general de la API y sus endpoints disponibles"
+					},
+					"response": []
+				},
+				{
+					"name": "API Documentation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/docs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"docs"
+							]
+						},
+						"description": "Obtiene la documentación completa de esquemas y endpoints"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "👥 Clientes",
+			"item": [
+				{
+					"name": "Crear Cliente",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 or 409\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+									"});",
+									"",
+									"if (pm.response.code === 201) {",
+									"    pm.test(\"Response has success field\", function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData.success).to.be.true;",
+									"    });",
+									"    ",
+									"    pm.test(\"Response contains data\", function () {",
+									"        const jsonData = pm.response.json();",
+									"        pm.expect(jsonData.data).to.exist;",
+									"    });",
+									"}",
+									"",
+									"pm.test(\"Response time is less than 10000ms\", function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(10000);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-email",
+								"value": "{{x_email}}",
+								"type": "text"
+							},
+							{
+								"key": "x-api-key",
+								"value": "{{x_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "x-hub-signature",
+								"value": "{{x_hub_signature}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"customerData\": {\n    \"tipoDocumento\": \"CC\",\n    \"numeroDocumento\": \"12345678\",\n    \"razonSocial\": \"Juan Pérez\",\n    \"email\": \"juan.perez@email.com\",\n    \"telefono\": \"3001234567\",\n    \"direccion\": \"Calle 123 #45-67\",\n    \"ciudad\": \"Bogotá\",\n    \"departamento\": \"Cundinamarca\",\n    \"codigoPostal\": \"110111\"\n  },\n  \"eventType\": \"manual_creation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/clients",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"clients"
+							]
+						},
+						"description": "Crea un nuevo cliente en SIGO con todos los datos requeridos"
+					},
+					"response": [
+						{
+							"name": "Cliente Creado Exitosamente",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"customerData\": {\n    \"tipoDocumento\": \"CC\",\n    \"numeroDocumento\": \"12345678\",\n    \"razonSocial\": \"Juan Pérez\",\n    \"email\": \"juan.perez@email.com\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/clients",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"clients"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"Cliente creado exitosamente en SIGO\",\n  \"data\": {\n    \"id\": \"12345\",\n    \"name\": {\n      \"0\": \"Juan\",\n      \"1\": \"Pérez\"\n    },\n    \"identification\": {\n      \"type\": \"13\",\n      \"number\": \"12345678\"\n    },\n    \"created_at\": \"2025-01-01T12:00:00Z\"\n  },\n  \"eventType\": \"manual_creation\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "🧾 Facturas",
+			"item": [
+				{
+					"name": "Crear Factura",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has success field\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Response contains data\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Response time is less than 15000ms\", function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(15000);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-email",
+								"value": "{{x_email}}",
+								"type": "text"
+							},
+							{
+								"key": "x-api-key",
+								"value": "{{x_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "x-hub-signature",
+								"value": "{{x_hub_signature}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2025-08-30\",\n  \"customer\": {\n    \"identification\": \"12345678\",\n    \"branch_office\": 0\n  },\n  \"items\": [\n    {\n      \"code\": \"QF-P06-P01\",\n      \"description\": \"Producto ejemplo\",\n      \"quantity\": 2,\n      \"price\": 50000,\n      \"discount\": 0\n    },\n    {\n      \"code\": \"IN107\",\n      \"description\": \"Servicio ejemplo\",\n      \"quantity\": 1,\n      \"price\": 25000,\n      \"discount\": 0\n    }\n  ],\n  \"observations\": \"Factura de ejemplo creada via API\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/invoices",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"invoices"
+							]
+						},
+						"description": "Crea una nueva factura en SIGO con cliente e items"
+					},
+					"response": [
+						{
+							"name": "Factura Creada Exitosamente",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"serie\": \"FE\",\n  \"numero\": 1001,\n  \"cliente\": {\n    \"razonSocial\": \"Juan Pérez\"\n  },\n  \"items\": [\n    {\n      \"descripcion\": \"Producto ejemplo\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 50000\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/invoices",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"invoices"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"Factura creada exitosamente\",\n  \"data\": {\n    \"id\": \"67890\",\n    \"numero_documento\": \"FE-1001\",\n    \"estado\": \"ACTIVA\",\n    \"total\": 148750,\n    \"pdf_url\": \"https://sigo.com/invoices/67890.pdf\",\n    \"xml_url\": \"https://sigo.com/invoices/67890.xml\",\n    \"created_at\": \"2025-01-01T12:00:00Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cancelar Factura (Nota de Crédito)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has success field\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Response contains data\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Response time is less than 10000ms\", function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(10000);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-email",
+								"value": "{{x_email}}",
+								"type": "text"
+							},
+							{
+								"key": "x-api-key",
+								"value": "{{x_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "x-hub-signature",
+								"value": "{{x_hub_signature}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"motivo\": \"Cancelación por devolución del cliente\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/invoices/cancel/FE/1001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"invoices",
+								"cancel",
+								"FE",
+								"1001"
+							]
+						},
+						"description": "Cancela una factura específica creando una nota de crédito"
+					},
+					"response": [
+						{
+							"name": "Factura Cancelada Exitosamente",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"motivo\": \"Cancelación por devolución del cliente\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/invoices/cancel/FE/1001",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"invoices",
+										"cancel",
+										"FE",
+										"1001"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"Nota de crédito creada para anulación\",\n  \"data\": {\n    \"id\": \"NC-001\",\n    \"nota_credito_id\": \"11111\",\n    \"factura_original\": \"FE-1001\",\n    \"estado\": \"ACTIVA\",\n    \"motivo\": \"Cancelación por devolución del cliente\",\n    \"total_cancelado\": 148750,\n    \"created_at\": \"2025-01-01T14:00:00Z\"\n  }\n}"
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Script ejecutado antes de cada request",
+					"console.log('Ejecutando request a:', pm.request.url.toString());",
+					"",
+					"// Verificar que las variables de entorno estén configuradas",
+					"if (!pm.environment.get('base_url')) {",
+					"    console.warn('⚠️ Variable base_url no configurada');",
+					"}",
+					"if (!pm.environment.get('x_email')) {",
+					"    console.warn('⚠️ Variable x_email no configurada');",
+					"}",
+					"if (!pm.environment.get('x_api_key')) {",
+					"    console.warn('⚠️ Variable x_api_key no configurada');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Script ejecutado después de cada response",
+					"console.log('Response status:', pm.response.status);",
+					"console.log('Response time:', pm.response.responseTime + 'ms');",
+					"",
+					"// Test común para todos los endpoints",
+					"pm.test('Response is JSON', function () {",
+					"    pm.response.to.be.json;",
+					"});",
+					"",
+					"// Log de errores de autenticación",
+					"if (pm.response.code === 401) {",
+					"    console.error('❌ Error de autenticación - Verificar headers x-email y x-api-key');",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "noauth"
+	}
+}
