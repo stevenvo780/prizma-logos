@@ -122,3 +122,4 @@ id_rsa*
 *serviceAccount*.json
 *service-account*.json
 *credentials*.json
+*.postman_environment.json
