@@ -1,4 +1,4 @@
-# ApiSigo Dockerfile
+# Logos Dockerfile
 FROM node:18-alpine
 
 # Instalar wget para healthcheck
@@ -7,8 +7,9 @@ RUN apk add --no-cache wget
 # Establecer directorio de trabajo
 WORKDIR /app
 
-# Copiar package.json y package-lock.json (si existe)
+# Copiar package.json y vendor local antes de npm ci (necesario para file: deps)
 COPY package*.json ./
+COPY vendor-contracts ./vendor-contracts
 
 # Instalar todas las dependencias (incluyendo devDependencies para compilar)
 RUN npm ci

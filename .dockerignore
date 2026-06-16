@@ -16,6 +16,10 @@ coverage
 
 dist
 build
+# Re-include vendor-contracts dist so the local package resolves
+!vendor-contracts
+!vendor-contracts/dist
+!vendor-contracts/dist/*
 
 .git
 .gitignore
