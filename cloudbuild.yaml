@@ -1,0 +1,41 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Build
+    args:
+      - 'build'
+      - '--no-cache'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/udea-filosofia/cloud-run-source-deploy/prizma-logos:$COMMIT_SHA'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Push
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/udea-filosofia/cloud-run-source-deploy/prizma-logos:$COMMIT_SHA'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: Deploy
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'prizma-logos'
+      - '--platform=managed'
+      - '--image=us-central1-docker.pkg.dev/udea-filosofia/cloud-run-source-deploy/prizma-logos:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--quiet'
+
+images:
+  - 'us-central1-docker.pkg.dev/udea-filosofia/cloud-run-source-deploy/prizma-logos:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
+
+tags:
+  - prizma-logos
+  - gcp-cloud-build-deploy-cloud-run
