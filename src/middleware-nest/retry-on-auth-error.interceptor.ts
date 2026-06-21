@@ -19,6 +19,15 @@ import type { RequestWithSigoCredentials } from "./sigo-credentials.middleware";
 export class RetryOnAuthErrorInterceptor implements NestInterceptor {
   private readonly MAX_RETRIES = 1;
 
+  // Enmascara el email para logs (PII): 2 chars del local-part + dominio.
+  private maskEmail(email: string): string {
+    const e = (email || "").trim();
+    if (!e) return "<empty>";
+    const at = e.indexOf("@");
+    if (at <= 0) return "***";
+    return `${e.slice(0, 2)}***${e.slice(at)}`;
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<RequestWithSigoCredentials>();
     const originalAuthHeaders = request.sigoAuthHeaders;
@@ -34,7 +43,7 @@ export class RetryOnAuthErrorInterceptor implements NestInterceptor {
         if (is401 && hasCredentials && notYetRetried) {
           console.warn(
             `[RetryInterceptor] ⚠️ Error 401 detectado. ` +
-            `Reintentando con nuevo token para ${credentials.email}...`
+            `Reintentando con nuevo token para ${this.maskEmail(credentials.email)}...`
           );
 
           // Marcar que ya se intentó retry

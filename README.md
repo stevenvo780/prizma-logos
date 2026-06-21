@@ -1,6 +1,6 @@
-# ApiSigo
+# Logos
 
-Servicio de facturación e integración SIGO (Colombia) usado por Hub Central.
+Servicio de facturación e integración SIGO/Siigo (Colombia) usado por Hub Central (Nous).
 
 ## Características
 
@@ -11,9 +11,9 @@ Servicio de facturación e integración SIGO (Colombia) usado por Hub Central.
 ## Instalación y uso
 
 ```bash
-cd ApiSigo
+cd logos
 npm install
-cp .env.example .env   # configura credenciales SIGO
+cp .env .env.local   # edita credenciales SIGO/Siigo
 
 # Desarrollo
 npm run dev
@@ -40,7 +40,7 @@ Base: `http://localhost:3004`
 
 ### Facturas
 - `POST /api/invoices` → Crear factura
-- `POST /api/invoices/:serie/:numero/cancel` → Anular (crea nota de crédito)
+- `POST /api/invoices/cancel/:serie/:numero` → Anular (crea nota de crédito)
 
 Headers requeridos para `/api/invoices` y rutas protegidas:
 - `x-email`: correo del usuario SIGO

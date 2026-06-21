@@ -1,12 +1,23 @@
 import { Controller, Get } from '@nestjs/common';
+import { IdempotencyRedisService } from './services/idempotency-redis.service';
 
 @Controller()
 export class AppController {
-  // Olympo-standard liveness probe. Excluded from the global `api` prefix in
+  constructor(private readonly idempotencyService: IdempotencyRedisService) {}
+
+  // Prizma-standard liveness probe. Excluded from the global `api` prefix in
   // index.ts, so it is served at bare `/health` (ARCHITECTURE.md §3 registry).
   @Get('health')
   health() {
-    return { status: 'healthy', service: 'apisigo' };
+    const idempotencyStatus = this.idempotencyService.getConnectionStatus();
+    return {
+      status: 'healthy',
+      service: 'logos',
+      idempotency: {
+        backend: idempotencyStatus.backend,
+        connected: idempotencyStatus.connected,
+      },
+    };
   }
 
   @Get()
@@ -34,7 +45,7 @@ export class AppController {
         invoices: {
           'POST /api/invoices': 'Crear nueva factura',
           'POST /api/invoices/webhook': 'Crear factura desde webhook',
-          'POST /api/invoices/:serie/:numero/cancel':
+          'POST /api/invoices/cancel/:serie/:numero':
             'Anular factura (crear nota de crédito)',
         },
       },

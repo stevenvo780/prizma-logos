@@ -1,7 +1,7 @@
 {
-  "name": "apisigo-webhook-tests",
+  "name": "prizma-logos-webhook-tests",
   "version": "1.0.0",
-  "description": "Tests para ApiSigo webhook system",
+  "description": "Tests para Logos webhook system",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",

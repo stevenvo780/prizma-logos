@@ -2,11 +2,18 @@ import 'reflect-metadata';
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { captureRawBody } from './middleware-nest/raw-body.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
+
+  // IMPORTANTE: Registrar el middleware de captura de raw body ANTES de cualquier parser JSON.
+  // Este middleware permite que verifySignature() acceda al body raw (no JSON.stringify)
+  // para validar la firma HMAC del webhook desde Nous.
+  app.use(express.json({ verify: captureRawBody }));
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
@@ -27,7 +34,7 @@ async function bootstrap() {
     ],
   });
 
-  // Global API prefix, but keep the Olympo-standard health probe at bare `/health`
+  // Global API prefix, but keep the Prizma-standard health probe at bare `/health`
   // (ARCHITECTURE.md §3 service registry expects healthPath "/health").
   app.setGlobalPrefix('api', { exclude: ['health'] });
 
@@ -40,7 +47,7 @@ async function bootstrap() {
 
   const PORT = Number(process.env.PORT) || 8080;
   await app.listen(PORT);
-  console.log(`ApiSigo is running on port ${PORT}`);
+  console.log(`Logos is running on port ${PORT}`);
 }
 
 bootstrap().catch(() => {

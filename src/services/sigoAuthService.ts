@@ -14,6 +14,19 @@ export interface SigoAuthHeaders {
 }
 
 export class SigoAuthService {
+  // Enmascara el email para logs: conserva los primeros 2 chars del local-part
+  // y el dominio, ocultando el resto. Evita exponer PII en Cloud Logging.
+  private static maskEmail(email: string): string {
+    const e = (email || "").trim();
+    if (!e) return "<empty>";
+    const at = e.indexOf("@");
+    if (at <= 0) return "***";
+    const local = e.slice(0, at);
+    const domain = e.slice(at);
+    const visible = local.slice(0, 2);
+    return `${visible}***${domain}`;
+  }
+
   private static normalizeAccessKey(input: string): string {
     const t = (input || "").trim();
     if (!t) return t;
@@ -79,7 +92,7 @@ export class SigoAuthService {
       };
 
       console.log(
-        `[SigoAuth] Autenticando usuario: ${credentials.email} en ${authUrl}`
+        `[SigoAuth] Autenticando usuario: ${this.maskEmail(credentials.email)} en ${authUrl}`
       );
 
       const response = await axios.post<SigoAuthResponse>(authUrl, authData, {
@@ -96,7 +109,7 @@ export class SigoAuthService {
       const token = response.data.access_token;
 
       console.log(
-        `[SigoAuth] ✓ Autenticación exitosa para ${credentials.email}` +
+        `[SigoAuth] ✓ Autenticación exitosa para ${this.maskEmail(credentials.email)}` +
         (response.data.expires_in ? ` (expira en ${response.data.expires_in}s)` : "")
       );
 
@@ -109,7 +122,7 @@ export class SigoAuthService {
       return token;
     } catch (error) {
       console.error(
-        `[SigoAuth] ✗ Error de autenticación para ${credentials.email}:`,
+        `[SigoAuth] ✗ Error de autenticación para ${this.maskEmail(credentials.email)}:`,
         error instanceof Error ? error.message : String(error)
       );
       throw new Error(`Error de autenticación: ${error}`);
@@ -122,8 +135,8 @@ export class SigoAuthService {
   ): Promise<SigoAuthHeaders> {
     // Si se fuerza refresh, limpiar cache primero
     if (forceRefresh) {
-      console.log(`[SigoAuth] Refresh forzado para ${credentials.email}`);
-      AuthenticationCache.clearCache();
+      console.log(`[SigoAuth] Refresh forzado para ${this.maskEmail(credentials.email)}`);
+      AuthenticationCache.clearCache(credentials.email, credentials.apiKey);
     }
 
     let token = AuthenticationCache.getToken(

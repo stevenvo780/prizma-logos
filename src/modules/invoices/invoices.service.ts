@@ -7,7 +7,7 @@ type AxiosError = any;
 import type { SigoAuthHeaders } from '@/services/sigoAuthService';
 import http from 'http';
 import https from 'https';
-import { publishInvoiceSent } from '@/cauce/hub';
+import { publishInvoiceSent } from '@/prizma/hub';
 
 export interface CreateClientData {
   tipoDocumento: 'RUC' | 'DNI' | 'CE' | 'NIT' | 'CC';
@@ -301,6 +301,47 @@ export class InvoiceService {
     return v;
   }
 
+  /**
+   * Validate that the total returned by Siigo matches the total calculated locally.
+   * Logs a warning if the difference exceeds a tolerance (1% or 100 COP).
+   */
+  private validateInvoiceTotal(
+    localSubtotal: number,
+    localTaxesTotal: number,
+    localTotal: number,
+    sigoResult: Record<string, unknown>,
+  ): void {
+    try {
+      const sigoTotal = Number((sigoResult as any)?.total ?? (sigoResult as any)?.amount ?? 0);
+      if (!sigoTotal) return; // Siigo didn't return a total
+
+      const epsilon = Math.max(100, localTotal * 0.01); // 1% or 100 COP, whichever is larger
+      const diff = Math.abs(sigoTotal - localTotal);
+
+      if (diff > epsilon) {
+        console.warn(
+          '[Logos] Total mismatch after invoice creation',
+          {
+            localSubtotal,
+            localTaxesTotal,
+            localTotal,
+            sigoTotal,
+            diff,
+            exceedsEpsilon: true,
+          },
+        );
+      } else if (diff > 0.01) {
+        console.log(
+          '[Logos] Minor total variance detected',
+          { localTotal, sigoTotal, diff },
+        );
+      }
+    } catch (error) {
+      console.error('[Logos] Error validating invoice total:', error);
+      // Never throw: this is observability only
+    }
+  }
+
   async createInvoice(
     data: CreateInvoiceData,
     authHeaders: SigoAuthHeaders,
@@ -329,7 +370,27 @@ export class InvoiceService {
       try {
         const existing = await this.findCustomerByIdentification(data.customer.identification, authHeaders);
         if (!existing) {
+          /**
+           * Infer document type from document number:
+           * - NIT (Colombia): typically >9 digits with a check digit, or ends with -<digit>
+           * - CC (Cédula de Ciudadanía): 6-10 digits, no separator
+           * Default to CC for ambiguous cases
+           */
           const inferTipo = (ident: string): CreateClientData['tipoDocumento'] => {
+            const trimmed = (ident || '').trim();
+
+            // NIT heuristics: >9 chars, may have hyphen for check digit, >10 digits when normalized
+            if (trimmed.includes('-')) {
+              // Pattern like "1234567890-1" is likely NIT
+              const numericPart = trimmed.replace(/\D/g, '');
+              if (numericPart.length > 9) return 'NIT';
+            }
+
+            // Long number (>10 digits) without separator: likely NIT
+            const onlyDigits = trimmed.replace(/\D/g, '');
+            if (onlyDigits.length > 10) return 'NIT';
+
+            // Default to CC
             return 'CC';
           };
           const minimal: CreateClientData = {
@@ -400,7 +461,7 @@ export class InvoiceService {
       ? data.payments.map((p) => ({ id: Number(p.id), value: Number(p.value), due_date: p.due_date }))
       : undefined;
 
-    console.log('[ApiSigo] build payload resumen', {
+    console.log('[Logos] build payload resumen', {
       items: preparedItems.length,
       subtotal,
       taxesTotal,
@@ -437,17 +498,21 @@ export class InvoiceService {
       if (headers['Partner-Id'] && !headers['Partner-ID']) headers['Partner-ID'] = headers['Partner-Id'];
 
       const variants = this.buildSellerVariants(sigoPayload, Number(resolvedSellerId));
-      console.log('[ApiSigo] intentos variantes seller', { variants: variants.length });
+      console.log('[Logos] intentos variantes seller', { variants: variants.length });
 
       let lastErr: any;
       for (let i = 0; i < variants.length; i++) {
         const payloadToSend: any = JSON.parse(JSON.stringify(variants[i]));
-        console.log('[ApiSigo] intento envío', { variant: i + 1, hasDocSeller: !!payloadToSend?.document?.seller, hasRootSeller: Object.prototype.hasOwnProperty.call(payloadToSend, 'seller') });
+        console.log('[Logos] intento envío', { variant: i + 1, hasDocSeller: !!payloadToSend?.document?.seller, hasRootSeller: Object.prototype.hasOwnProperty.call(payloadToSend, 'seller') });
         try {
           const response = await this.client.post('/v1/invoices', payloadToSend, { headers, timeout: invoiceTimeout });
           const out = (response as { data: Record<string, unknown> }).data;
-          // Olympo: ApiSigo owns the `invoice` SSOT → emit INVOICE_SENT (non-blocking,
-          // fault-tolerant; never gates the local invoicing flow). See src/cauce/hub.ts.
+
+          // Validate that Siigo's total matches our calculation
+          this.validateInvoiceTotal(subtotal, taxesTotal, total, out);
+
+          // Prizma: Logos owns the `invoice` SSOT → emit INVOICE_SENT (non-blocking,
+          // fault-tolerant; never gates the local invoicing flow). See src/prizma/hub.ts.
           this.emitInvoiceSent(out, data);
           return out;
         } catch (err: any) {
@@ -456,7 +521,7 @@ export class InvoiceService {
           const params = err?.response?.data?.Errors?.[0]?.Params || [];
           const isSellerReq = siigoCode === 'parameter_required' && (msg?.toLowerCase().includes('seller') || params?.includes('seller'));
           const isInvalidTax = siigoCode === 'invalid_reference' && (msg?.toLowerCase().includes('tax') || params?.some((p: string) => p.includes('taxes')));
-          console.error('[ApiSigo] fallo variante', { variant: i + 1, siigoCode, msg });
+          console.error('[Logos] fallo variante', { variant: i + 1, siigoCode, msg });
 
           if (isInvalidTax) {
             const withoutTaxes = JSON.parse(JSON.stringify(payloadToSend));
@@ -464,10 +529,14 @@ export class InvoiceService {
               withoutTaxes.items = withoutTaxes.items.map((it: any) => { const { taxes, ...rest } = it || {}; return rest; });
             }
             try {
-              console.log('[ApiSigo] reintento sin taxes');
+              console.log('[Logos] reintento sin taxes');
               const response2 = await this.client.post('/v1/invoices', withoutTaxes, { headers, timeout: invoiceTimeout });
               const out2 = (response2 as { data: Record<string, unknown> }).data;
-              // Olympo: emit INVOICE_SENT on the no-taxes retry success path too.
+
+              // Validate total on the no-taxes path too
+              this.validateInvoiceTotal(subtotal, 0, subtotal, out2);
+
+              // Prizma: emit INVOICE_SENT on the no-taxes retry success path too.
               this.emitInvoiceSent(out2, data);
               return out2;
             } catch (err2: any) {
@@ -515,18 +584,18 @@ export class InvoiceService {
         timeout: error?.config?.timeout,
         payloadShape: shape,
       };
-      console.error('[ApiSigo] error final createInvoice', { status: e.statusCode, siigoCode, shape });
+      console.error('[Logos] error final createInvoice', { status: e.statusCode, siigoCode, shape });
       throw e;
     }
   }
 
   /**
-   * Olympo integration: announce a successful SIGO invoice to HubCentral.
+   * Prizma integration: announce a successful SIGO invoice to Nous.
    *
    * Best-effort and non-blocking — the HubClient swallows transport errors, and
    * we additionally guard locally so a publish failure can never affect the
    * caller's return value. `orderId` is derived from the observations note
-   * ("...desde orden #<id>") when the invoice came from a Graf/POS order.
+   * ("...desde orden #<id>") when the invoice came from a Hermes/POS order.
    */
   private emitInvoiceSent(sigoResult: Record<string, unknown>, data: CreateInvoiceData): void {
     try {
@@ -568,9 +637,28 @@ export class InvoiceService {
   ): Promise<Record<string, unknown>> {
     const res = await this.client.get(`/v1/invoices?number=${encodeURIComponent(String(numero))}`, { headers: authHeaders });
     const list: any[] = (res as any).data?.results || [];
-    const inv = Array.isArray(list) && list.length > 0 ? list[0] : null;
+
+    // Match by both serie/prefix and numero to avoid picking the wrong invoice
+    let inv = null;
+    if (Array.isArray(list) && list.length > 0) {
+      // Try exact match on prefix/serie first
+      inv = list.find((i: any) => (i.prefix || i.serie || '') === serie);
+      // If no exact match and only one result, use it with warning
+      if (!inv && list.length === 1) {
+        console.warn(`[Logos] Credit note: serie '${serie}' not found in Siigo results, using only match`);
+        inv = list[0];
+      } else if (!inv) {
+        throw new Error(`Factura con serie '${serie}' y número ${numero} no encontrada o serie ambigua en Siigo`);
+      }
+    }
+
     if (!inv || !inv.id) {
       throw new Error('Factura no encontrada en Siigo');
+    }
+
+    // Validate invoice is not already cancelled
+    if (inv.status === 'CANCELLED' || inv.status === 'VOIDED' || inv.cancelledAt) {
+      throw new Error(`Factura ya ha sido anulada (status: ${inv.status})`);
     }
 
     const payload: Record<string, unknown> = {
@@ -597,9 +685,23 @@ export class InvoiceService {
   }): CreateInvoiceData {
     const idDoc = order.customer?.documentNumber || order.user?.documentNumber || '222222222222';
 
+    /**
+     * Infer document type from document number using the same heuristic as createInvoice
+     */
+    const inferTipo = (ident: string): CreateClientData['tipoDocumento'] => {
+      const trimmed = (ident || '').trim();
+      if (trimmed.includes('-')) {
+        const numericPart = trimmed.replace(/\D/g, '');
+        if (numericPart.length > 9) return 'NIT';
+      }
+      const onlyDigits = trimmed.replace(/\D/g, '');
+      if (onlyDigits.length > 10) return 'NIT';
+      return 'CC';
+    };
+
     const customerData = idDoc !== '222222222222'
       ? {
-        tipoDocumento: 'CC' as const,
+        tipoDocumento: inferTipo(idDoc),
         numeroDocumento: idDoc,
         razonSocial: order.customer?.name || order.user?.name || 'Cliente Sin Nombre',
         email: order.customer?.email || order.user?.email,
@@ -612,7 +714,7 @@ export class InvoiceService {
       customer: { identification: idDoc, branch_office: 0 },
       customerData,
       items: order.items.map((it) => ({
-        code: it.product.code || `GRAF-${it.product.id}`,
+        code: it.product.code || `HERMES-${it.product.id}`,
         description: it.product.title,
         quantity: it.quantity,
         price: it.finalPrice,
